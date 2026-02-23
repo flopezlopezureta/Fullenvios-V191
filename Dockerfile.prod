@@ -1,0 +1,15 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+# Copiamos solo los archivos necesarios para la ejecución
+COPY package*.json ./
+RUN npm install --omit=dev
+
+# Copiamos el build generado por GitHub Actions y el código del servidor
+COPY dist ./dist
+COPY . .
+
+EXPOSE 3001
+
+CMD ["node", "server.js"]
