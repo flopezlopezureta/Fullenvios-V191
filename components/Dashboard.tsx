@@ -12,10 +12,13 @@ import { AuthContext } from '../contexts/AuthContext';
 import PackageFilters from './admin/PackageFilters';
 import ShippingLabelModal from './client/ShippingLabelModal';
 import BatchShippingLabelModal from './client/BatchShippingLabelModal';
-import { IconPrinter, IconTrash, IconChevronLeft, IconChevronRight, IconChevronDown, IconFileSpreadsheet, IconUserPlus } from './Icon';
+import { IconPrinter, IconTrash, IconChevronLeft, IconChevronRight, IconChevronDown, IconFileSpreadsheet, IconUserPlus, IconRoute } from './Icon';
 import DeletePasswordModal from './admin/DeletePasswordModal';
 import ImportPackagesModal from './client/ImportPackagesModal';
 import BulkAssignDriverModal from './modals/BulkAssignDriverModal';
+import RouteOptimizerModal from './modals/RouteOptimizerModal';
+import MultiDriverOptimizerModal from './modals/MultiDriverOptimizerModal';
+import { optimizeRoute } from '../services/routeOptimizer';
 
 // Fix: declare XLSX as it is loaded via global script tag in index.html
 declare const XLSX: any;
@@ -47,580 +50,646 @@ const getStatusOptionClasses = (status: PackageStatus | null): string => {
 }
 
 const Dashboard: React.FC = () => {
-  const [packages, setPackages] = useState<Package[]>([]);
-  const [totalPackages, setTotalPackages] = useState(0);
-  const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  
-  // Modal states
-  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
-  const [assigningPackage, setAssigningPackage] = useState<Package | null>(null);
-  const [editingPackage, setEditingPackage] = useState<Package | null>(null);
-  const [isDeletePasswordModalOpen, setIsDeletePasswordModalOpen] = useState(false);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isBulkAssignModalOpen, setIsBulkAssignModalOpen] = useState(false);
-  const [printingPackages, setPrintingPackages] = useState<Package[]>([]);
+    const [packages, setPackages] = useState<Package[]>([]);
+    const [totalPackages, setTotalPackages] = useState(0);
+    const [users, setUsers] = useState<User[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-  // Selection and Pagination states
-  const [selectedPackages, setSelectedPackages] = useState<Set<string>>(new Set());
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
+    // Modal states
+    const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
+    const [assigningPackage, setAssigningPackage] = useState<Package | null>(null);
+    const [editingPackage, setEditingPackage] = useState<Package | null>(null);
+    const [isDeletePasswordModalOpen, setIsDeletePasswordModalOpen] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isBulkAssignModalOpen, setIsBulkAssignModalOpen] = useState(false);
+    const [isMultiDriverOptimizerOpen, setIsMultiDriverOptimizerOpen] = useState(false);
+    const [isOptimizerOpen, setIsOptimizerOpen] = useState(false);
+    const [currentLocation, setCurrentLocation] = useState<{ lat: number, lng: number } | undefined>(undefined);
+    const [printingPackages, setPrintingPackages] = useState<Package[]>([]);
 
-  // Filter and View states
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<PackageStatus | null>(null);
-  const [driverFilter, setDriverFilter] = useState<string>('');
-  const [clientFilter, setClientFilter] = useState<string>('');
-  const [communeFilter, setCommuneFilter] = useState<string>('');
-  const [cityFilter, setCityFilter] = useState<string>('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
-  const statusDropdownRef = useRef<HTMLDivElement>(null);
-  const auth = useContext(AuthContext);
+    // Selection and Pagination states
+    const [selectedPackages, setSelectedPackages] = useState<Set<string>>(new Set());
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(25);
 
-  const fetchData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-        const params = {
-            page: currentPage,
-            limit: itemsPerPage,
-            searchQuery,
-            statusFilter,
-            driverFilter,
-            clientFilter,
-            communeFilter,
-            cityFilter,
-            startDate,
-            endDate,
+    // Filter and View states
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [statusFilter, setStatusFilter] = useState<PackageStatus | null>(null);
+    const [driverFilter, setDriverFilter] = useState<string>('');
+    const [clientFilter, setClientFilter] = useState<string>('');
+    const [communeFilter, setCommuneFilter] = useState<string>('');
+    const [cityFilter, setCityFilter] = useState<string>('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+    const statusDropdownRef = useRef<HTMLDivElement>(null);
+    const auth = useContext(AuthContext);
+
+    const fetchData = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const params = {
+                page: currentPage,
+                limit: itemsPerPage,
+                searchQuery,
+                statusFilter,
+                driverFilter,
+                clientFilter,
+                communeFilter,
+                cityFilter,
+                startDate,
+                endDate,
+            };
+            const [{ packages: pkgs, total }, allUsers] = await Promise.all([
+                api.getPackages(params),
+                api.getUsers()
+            ]);
+            setPackages(pkgs as Package[]);
+            setTotalPackages(total);
+            setUsers(allUsers as User[]);
+        } catch (error) {
+            console.error("Failed to fetch data", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [currentPage, itemsPerPage, searchQuery, statusFilter, driverFilter, clientFilter, communeFilter, cityFilter, startDate, endDate]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    useEffect(() => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(pos => {
+                setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            });
+        }
+    }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+                setIsStatusDropdownOpen(false);
+            }
         };
-        const [{ packages: pkgs, total }, allUsers] = await Promise.all([
-            api.getPackages(params),
-            api.getUsers()
-        ]);
-        setPackages(pkgs);
-        setTotalPackages(total);
-        setUsers(allUsers);
-    } catch (error) {
-        console.error("Failed to fetch data", error);
-    } finally {
-        setIsLoading(false);
-    }
-  }, [currentPage, itemsPerPage, searchQuery, statusFilter, driverFilter, clientFilter, communeFilter, cityFilter, startDate, endDate]);
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-  
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-        if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
-            setIsStatusDropdownOpen(false);
+    const resetFiltersForNewData = () => {
+        setSearchQuery('');
+        setStatusFilter(null);
+        setDriverFilter('');
+        setClientFilter('');
+        setCommuneFilter('');
+        setCityFilter('');
+        setStartDate('');
+        setEndDate('');
+        setCurrentPage(1);
+    };
+
+    const handleCreatePackage = async (data: Omit<PackageCreationData, 'origin'>) => {
+        if (!auth?.user) {
+            console.error("Cannot create package: user not authenticated.");
+            return;
+        }
+        try {
+            await api.createPackage({
+                ...data,
+                origin: 'Centro de Distribución', // Admins create from a central location
+            });
+
+            resetFiltersForNewData();
+            fetchData();
+
+            setIsCreateModalOpen(false);
+        } catch (error: any) {
+            console.error("Failed to create package", error);
+            alert("Error al crear el paquete: " + (error.message || "Error desconocido"));
         }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
-  const resetFiltersForNewData = () => {
-      setSearchQuery('');
-      setStatusFilter(null);
-      setDriverFilter('');
-      setClientFilter('');
-      setCommuneFilter('');
-      setCityFilter('');
-      setStartDate('');
-      setEndDate('');
-      setCurrentPage(1);
-  };
+    const handleImportPackages = async (packagesToCreate: Omit<PackageCreationData, 'origin' | 'creatorId'>[], selectedClientId?: string) => {
+        if (!selectedClientId) return;
 
-  const handleCreatePackage = async (data: Omit<PackageCreationData, 'origin'>) => {
-    if (!auth?.user) {
-      console.error("Cannot create package: user not authenticated.");
-      return;
-    }
-    try {
-        await api.createPackage({
-          ...data,
-          origin: 'Centro de Distribución', // Admins create from a central location
-        });
-        
-        resetFiltersForNewData();
-        fetchData();
-        
-        setIsCreateModalOpen(false);
-    } catch (error: any) {
-        console.error("Failed to create package", error);
-        alert("Error al crear el paquete: " + (error.message || "Error desconocido"));
-    }
-  };
+        const client = users.find((u: User) => u.id === selectedClientId);
+        const origin = client?.pickupAddress || client?.address || 'Centro de Distribución';
 
-  const handleImportPackages = async (packagesToCreate: Omit<PackageCreationData, 'origin' | 'creatorId'>[], selectedClientId?: string) => {
-      if (!selectedClientId) return;
-      
-      const client = users.find(u => u.id === selectedClientId);
-      const origin = client?.pickupAddress || client?.address || 'Centro de Distribución';
+        const fullPackagesData: PackageCreationData[] = packagesToCreate.map((p: any) => ({
+            ...p,
+            origin,
+            creatorId: selectedClientId,
+        }));
 
-      const fullPackagesData: PackageCreationData[] = packagesToCreate.map(p => ({
-          ...p,
-          origin,
-          creatorId: selectedClientId,
-      }));
-
-      try {
-          await api.createMultiplePackages(fullPackagesData);
-          resetFiltersForNewData();
-          fetchData();
-          setIsImportModalOpen(false);
-          alert(`${fullPackagesData.length} paquetes importados correctamente.`);
-      } catch (error) {
-          console.error("Failed to import packages", error);
-          alert("Error al importar los paquetes. Inténtelo de nuevo.");
-      }
-  };
-
-  const handleUpdatePackage = async (pkgId: string, data: PackageUpdateData) => {
-    await api.updatePackage(pkgId, data);
-    fetchData(); // Refetch to see the changes
-    setEditingPackage(null);
-  };
-  
-  const handleAssignDriver = async (pkgId: string, driverId: string | null, newDeliveryDate: Date) => {
-    await api.assignDriverToPackage(pkgId, driverId, newDeliveryDate);
-    fetchData(); // Refetch to see the changes
-    setAssigningPackage(null);
-  };
-
-  const handleBulkAssignDriver = async (driverId: string, newDeliveryDate: Date) => {
-    const idsToAssign: string[] = Array.from(selectedPackages);
-    if (idsToAssign.length === 0) return;
-
-    try {
-        await api.batchAssignDriverToPackages(idsToAssign, driverId, newDeliveryDate);
-        fetchData(); // Refetch data to show changes
-        setSelectedPackages(new Set()); // Clear selection
-        setIsBulkAssignModalOpen(false); // Close modal
-    } catch (error) {
-        console.error("Failed to bulk assign driver", error);
-        alert("Ocurrió un error al asignar los paquetes.");
-    }
-  };
-
-  const handleMarkForReturn = async (pkg: Package) => {
-    try {
-        await api.markPackageForReturn(pkg.id);
-        fetchData(); // Refetch to see the changes
-    } catch (error) {
-        console.error("Failed to mark package for return", error);
-        alert("Error al marcar el paquete para devolución.");
-    }
-  };
-
-  const drivers = users.filter(u => u.role === Role.Driver && u.status === UserStatus.Approved);
-  const clients = users.filter(u => u.role === Role.Client && u.status === UserStatus.Approved);
-
-  const uniqueCommunes = useMemo(() => {
-    const communes = new Set(packages.map(p => p.recipientCommune));
-    return Array.from(communes).sort((a: string, b: string) => a.localeCompare(b));
-  }, [packages]);
-  
-  const uniqueCities = useMemo(() => {
-    const cities = new Set(packages.map(p => p.recipientCity));
-    return Array.from(cities).sort((a: string, b: string) => a.localeCompare(b));
-  }, [packages]);
-
-  const handleExportRoute = async () => {
-    if (!driverFilter || totalPackages === 0) return;
-    const driver = drivers.find(d => d.id === driverFilter);
-    if (!driver) return;
-
-    try {
-        const { packages: allFilteredPackages } = await api.getPackages({ 
-            limit: 0, 
-            searchQuery, statusFilter, driverFilter, clientFilter, communeFilter, cityFilter, startDate, endDate
-        });
-
-        const dateStr = new Date().toISOString().split('T')[0];
-        const driverName = driver.name.replace(/\s+/g, '_');
-        const escapeCsvField = (field: any) => `"${String(field || '').replace(/"/g, '""')}"`;
-        const circuitHeaders = ['Address', 'Name'];
-        const circuitRows = allFilteredPackages.map(p => [
-            `${p.recipientAddress}, ${p.recipientCommune}, ${p.recipientCity}`,
-            p.recipientName
-        ].map(escapeCsvField).join(','));
-        
-        const csvContent = [circuitHeaders.join(','), ...circuitRows].join('\n');
-        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `Circuit_${driverName}_${dateStr}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-    } catch (error) {
-        console.error("Failed to export route data", error);
-        alert("Error al exportar la ruta.");
-    }
-  };
-    
-  const handleExportExcel = async () => {
-    if (totalPackages === 0) return;
-    try {
-        const { packages: allFilteredPackages } = await api.getPackages({
-             limit: 0,
-             searchQuery, statusFilter, driverFilter, clientFilter, communeFilter, cityFilter, startDate, endDate
-        });
-        const dataToExport = allFilteredPackages.map(pkg => {
-            const creator = users.find(u => u.id === pkg.creatorId);
-            const driver = users.find(u => u.id === pkg.driverId);
-            const deliveredEvent = pkg.history.find(e => e.status === PackageStatus.Delivered);
-
-            return {
-                'ID Paquete': pkg.id,
-                'Fecha Creación': new Date(pkg.createdAt).toLocaleString('es-CL'),
-                'Fecha Entrega': deliveredEvent ? new Date(deliveredEvent.timestamp).toLocaleString('es-CL') : 'No entregado',
-                'Estado': pkg.status.replace('_', ' '),
-                'Tipo Envío': pkg.shippingType,
-                'Destinatario': pkg.recipientName,
-                'Dirección': `${pkg.recipientAddress}, ${pkg.recipientCommune}, ${pkg.recipientCity}`,
-                'Conductor': driver ? driver.name : 'No asignado',
-                'Cliente': creator ? creator.name : 'Desconocido',
-                'Recibido por': pkg.deliveryReceiverName || '',
-                'RUT Recibe': pkg.deliveryReceiverId || '',
-            };
-        });
-
-        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Paquetes");
-
-        const dateStr = new Date().toISOString().split('T')[0];
-        XLSX.writeFile(workbook, `Reporte_Paquetes_${dateStr}.xlsx`);
-    } catch(error) {
-        console.error("Failed to export Excel data", error);
-        alert("Error al exportar a Excel.");
-    }
-  };
-
-
-  useEffect(() => {
-    setCurrentPage(1);
-    setSelectedPackages(new Set());
-  }, [searchQuery, statusFilter, driverFilter, communeFilter, cityFilter, clientFilter, itemsPerPage, startDate, endDate]);
-
-  const handleSelectPackage = (pkg: Package) => {
-    setSelectedPackages(prev => {
-        const newSelection = new Set(prev);
-        if (newSelection.has(pkg.id)) {
-            newSelection.delete(pkg.id);
-        } else {
-            newSelection.add(pkg.id);
+        try {
+            await api.createMultiplePackages(fullPackagesData);
+            resetFiltersForNewData();
+            fetchData();
+            setIsImportModalOpen(false);
+            alert(`${fullPackagesData.length} paquetes importados correctamente.`);
+        } catch (error) {
+            console.error("Failed to import packages", error);
+            alert("Error al importar los paquetes. Inténtelo de nuevo.");
         }
-        return newSelection;
-    });
-  };
+    };
 
-  const isAllOnPageSelected = useMemo(() => {
-    if (packages.length === 0) return false;
-    return packages.every(p => selectedPackages.has(p.id));
-  }, [packages, selectedPackages]);
+    const handleUpdatePackage = async (pkgId: string, data: PackageUpdateData) => {
+        await api.updatePackage(pkgId, data);
+        fetchData(); // Refetch to see the changes
+        setEditingPackage(null);
+    };
 
-  const handleSelectAllOnPageClick = () => {
-    const pageIds = new Set(packages.map(p => p.id));
-    if (isAllOnPageSelected) {
+    const handleAssignDriver = async (pkgId: string, driverId: string | null, newDeliveryDate: Date) => {
+        await api.assignDriverToPackage(pkgId, driverId, newDeliveryDate);
+        fetchData(); // Refetch to see the changes
+        setAssigningPackage(null);
+    };
+
+    const handleBulkAssignDriver = async (driverId: string, newDeliveryDate: Date, autoOptimize: boolean) => {
+        let idsToAssign: string[] = Array.from(selectedPackages);
+        if (idsToAssign.length === 0) return;
+
+        try {
+            if (autoOptimize) {
+                // Obtener los objetos de los paquetes seleccionados para optimizar
+                const selectedPkgs = packages.filter((p: Package) => selectedPackages.has(p.id));
+                if (selectedPkgs.length > 0) {
+                    const optimized = optimizeRoute(selectedPkgs, currentLocation);
+                    idsToAssign = optimized.map((p: Package) => p.id);
+                }
+            }
+
+            await api.batchAssignDriverToPackages(idsToAssign, driverId, newDeliveryDate);
+            fetchData(); // Refetch data to show changes
+            setSelectedPackages(new Set()); // Clear selection
+            setIsBulkAssignModalOpen(false); // Close modal
+        } catch (error) {
+            console.error("Failed to bulk assign driver", error);
+            alert("Ocurrió un error al asignar los paquetes.");
+        }
+    };
+    const handleConfirmMultiDriverAssignment = async (assignments: { driverId: string, packages: Package[] }[]) => {
+        try {
+            await Promise.all(assignments.map((a: any) =>
+                api.batchAssignDriverToPackages(a.packages.map((p: Package) => p.id), a.driverId, new Date())
+            ));
+            fetchData();
+            setSelectedPackages(new Set());
+            setIsMultiDriverOptimizerOpen(false);
+        } catch (error) {
+            console.error("Failed multi-driver assignment", error);
+            alert("Error al asignar los paquetes.");
+        }
+    };
+    const handleMarkForReturn = async (pkg: Package) => {
+        try {
+            await api.markPackageForReturn(pkg.id);
+            fetchData(); // Refetch to see the changes
+        } catch (error) {
+            console.error("Failed to mark package for return", error);
+            alert("Error al marcar el paquete para devolución.");
+        }
+    };
+
+    const drivers = users.filter(u => u.role === Role.Driver && u.status === UserStatus.Approved);
+    const clients = users.filter(u => u.role === Role.Client && u.status === UserStatus.Approved);
+
+    const uniqueCommunes = useMemo(() => {
+        const communes = new Set(packages.map((p: Package) => p.recipientCommune));
+        return Array.from(communes).sort((a: any, b: any) => a.localeCompare(b));
+    }, [packages]);
+
+    const uniqueCities = useMemo(() => {
+        const cities = new Set(packages.map((p: Package) => p.recipientCity));
+        return Array.from(cities).sort((a: any, b: any) => a.localeCompare(b));
+    }, [packages]);
+
+    const handleExportRoute = async () => {
+        if (!driverFilter || totalPackages === 0) return;
+        const driver = drivers.find((d: User) => d.id === driverFilter);
+        if (!driver) return;
+
+        try {
+            const { packages: allFilteredPackages } = await api.getPackages({
+                limit: 0,
+                searchQuery, statusFilter, driverFilter, clientFilter, communeFilter, cityFilter, startDate, endDate
+            });
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            const driverName = driver.name.replace(/\s+/g, '_');
+            const escapeCsvField = (field: any) => `"${String(field || '').replace(/"/g, '""')}"`;
+            const circuitHeaders = ['Address', 'Name'];
+            const circuitRows = allFilteredPackages.map((p: Package) => [
+                `${p.recipientAddress}, ${p.recipientCommune}, ${p.recipientCity}`,
+                p.recipientName
+            ].map(escapeCsvField).join(','));
+
+            const csvContent = [circuitHeaders.join(','), ...circuitRows].join('\n');
+            const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Circuit_${driverName}_${dateStr}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+        } catch (error) {
+            console.error("Failed to export route data", error);
+            alert("Error al exportar la ruta.");
+        }
+    };
+
+    const handleExportExcel = async () => {
+        if (totalPackages === 0) return;
+        try {
+            const { packages: allFilteredPackages } = await api.getPackages({
+                limit: 0,
+                searchQuery, statusFilter, driverFilter, clientFilter, communeFilter, cityFilter, startDate, endDate
+            });
+            const dataToExport = allFilteredPackages.map((pkg: Package) => {
+                const creator = users.find((u: User) => u.id === pkg.creatorId);
+                const driver = users.find((u: User) => u.id === pkg.driverId);
+                const deliveredEvent = pkg.history.find((e: any) => e.status === PackageStatus.Delivered);
+
+                return {
+                    'ID Paquete': pkg.id,
+                    'Fecha Creación': new Date(pkg.createdAt).toLocaleString('es-CL'),
+                    'Fecha Entrega': deliveredEvent ? new Date(deliveredEvent.timestamp).toLocaleString('es-CL') : 'No entregado',
+                    'Estado': pkg.status.replace('_', ' '),
+                    'Tipo Envío': pkg.shippingType,
+                    'Destinatario': pkg.recipientName,
+                    'Dirección': `${pkg.recipientAddress}, ${pkg.recipientCommune}, ${pkg.recipientCity}`,
+                    'Conductor': driver ? driver.name : 'No asignado',
+                    'Cliente': creator ? creator.name : 'Desconocido',
+                    'Recibido por': pkg.deliveryReceiverName || '',
+                    'RUT Recibe': pkg.deliveryReceiverId || '',
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Paquetes");
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(workbook, `Reporte_Paquetes_${dateStr}.xlsx`);
+        } catch (error) {
+            console.error("Failed to export Excel data", error);
+            alert("Error al exportar a Excel.");
+        }
+    };
+
+
+    useEffect(() => {
+        setCurrentPage(1);
+        setSelectedPackages(new Set());
+    }, [searchQuery, statusFilter, driverFilter, communeFilter, cityFilter, clientFilter, itemsPerPage, startDate, endDate]);
+
+    const handleSelectPackage = (pkg: Package) => {
         setSelectedPackages(prev => {
             const newSelection = new Set(prev);
-            pageIds.forEach(id => newSelection.delete(id));
+            if (newSelection.has(pkg.id)) {
+                newSelection.delete(pkg.id);
+            } else {
+                newSelection.add(pkg.id);
+            }
             return newSelection;
         });
-    } else {
-        setSelectedPackages(prev => new Set([...prev, ...pageIds]));
-    }
-  };
+    };
 
-  const checkboxRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (checkboxRef.current) {
-        const someSelectedOnPage = packages.some(p => selectedPackages.has(p.id));
-        checkboxRef.current.indeterminate = someSelectedOnPage && !isAllOnPageSelected;
-    }
-  }, [selectedPackages, packages, isAllOnPageSelected]);
+    const isAllOnPageSelected = useMemo(() => {
+        if (packages.length === 0) return false;
+        return packages.every(p => selectedPackages.has(p.id));
+    }, [packages, selectedPackages]);
 
-  const selectedPackageObjects = useMemo(() => {
-    return packages.filter(p => selectedPackages.has(p.id));
-  }, [packages, selectedPackages]);
+    const handleSelectAllOnPageClick = () => {
+        const pageIds = new Set(packages.map(p => p.id));
+        if (isAllOnPageSelected) {
+            setSelectedPackages(prev => {
+                const newSelection = new Set(prev);
+                pageIds.forEach(id => newSelection.delete(id));
+                return newSelection;
+            });
+        } else {
+            setSelectedPackages(prev => new Set([...prev, ...pageIds]));
+        }
+    };
 
-  const canDeleteSelected = useMemo(() => {
-      if (selectedPackageObjects.length === 0) return false;
-      return selectedPackageObjects.every(p => p.status === PackageStatus.Pending);
-  }, [selectedPackageObjects]);
+    const checkboxRef = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        if (checkboxRef.current) {
+            const someSelectedOnPage = packages.some(p => selectedPackages.has(p.id));
+            checkboxRef.current.indeterminate = someSelectedOnPage && !isAllOnPageSelected;
+        }
+    }, [selectedPackages, packages, isAllOnPageSelected]);
 
-  const handleDeleteSelected = async () => {
-    const idsToDelete = [...selectedPackages].filter(id => {
-        const pkg = packages.find(p => p.id === id);
-        return pkg && pkg.status === PackageStatus.Pending;
-    });
+    const selectedPackageObjects = useMemo(() => {
+        return packages.filter(p => selectedPackages.has(p.id));
+    }, [packages, selectedPackages]);
 
-    await Promise.all(idsToDelete.map(id => api.deletePackage(id)));
-    
-    setSelectedPackages(new Set());
-    setIsDeletePasswordModalOpen(false);
-    fetchData(); // Refetch data
-  };
+    const canDeleteSelected = useMemo(() => {
+        if (selectedPackageObjects.length === 0) return false;
+        return selectedPackageObjects.every(p => p.status === PackageStatus.Pending);
+    }, [selectedPackageObjects]);
 
-  const isDateFiltering = startDate !== '' || endDate !== '';
+    const handleDeleteSelected = async () => {
+        const idsToDelete = [...selectedPackages].filter(id => {
+            const pkg = packages.find(p => p.id === id);
+            return pkg && pkg.status === PackageStatus.Pending;
+        });
 
-  return (
-    <div>
-      <div className="bg-[var(--background-secondary)] shadow-md rounded-lg">
-        <PackageFilters 
-            onOpenCreateModal={() => setIsCreateModalOpen(true)}
-            onOpenImportModal={() => setIsImportModalOpen(true)}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            drivers={drivers}
-            driverFilter={driverFilter}
-            onDriverChange={setDriverFilter}
-            communes={uniqueCommunes}
-            communeFilter={communeFilter}
-            onCommuneChange={setCommuneFilter}
-            cities={uniqueCities}
-            cityFilter={cityFilter}
-            onCityChange={setCityFilter}
-            startDate={startDate}
-            onStartDateChange={setStartDate}
-            endDate={endDate}
-            onEndDateChange={setEndDate}
-            onExportRoute={handleExportRoute}
-        />
+        await Promise.all(idsToDelete.map(id => api.deletePackage(id)));
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 p-3 border-b border-[var(--border-primary)]">
-            <div className="flex flex-wrap items-center gap-4">
-                <input
-                    type="checkbox"
-                    ref={checkboxRef}
-                    className={customCheckboxClass}
-                    checked={isAllOnPageSelected}
-                    onChange={handleSelectAllOnPageClick}
-                    disabled={packages.length === 0}
+        setSelectedPackages(new Set());
+        setIsDeletePasswordModalOpen(false);
+        fetchData(); // Refetch data
+    };
+
+    const isDateFiltering = startDate !== '' || endDate !== '';
+
+    const handleApplyOptimizedRoute = (sortedPackages: Package[]) => {
+        // En Admin no actualizamos el estado global 'packages' directamente porque está paginado,
+        // pero cerramos el modal. En el futuro podríamos implementar persistencia aquí o enviar
+        // el nuevo orden al backend.
+        setIsOptimizerOpen(false);
+    };
+
+    return (
+        <div>
+            <div className="bg-[var(--background-secondary)] shadow-md rounded-lg">
+                <PackageFilters
+                    onOpenCreateModal={() => setIsCreateModalOpen(true)}
+                    onOpenImportModal={() => setIsImportModalOpen(true)}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    drivers={drivers}
+                    driverFilter={driverFilter}
+                    onDriverChange={setDriverFilter}
+                    communes={uniqueCommunes}
+                    communeFilter={communeFilter}
+                    onCommuneChange={setCommuneFilter}
+                    cities={uniqueCities}
+                    cityFilter={cityFilter}
+                    onCityChange={setCityFilter}
+                    startDate={startDate}
+                    onStartDateChange={setStartDate}
+                    endDate={endDate}
+                    onEndDateChange={setEndDate}
+                    onExportRoute={handleExportRoute}
+                    onOptimizeRoute={() => setIsOptimizerOpen(true)}
                 />
-                <div className="h-6 w-px bg-[var(--border-primary)]"></div>
-                <div className="flex items-center gap-2">
-                    {selectedPackages.size > 0 && (
-                        <span className="text-sm font-semibold text-[var(--text-primary)]">{selectedPackages.size} seleccionados</span>
-                    )}
-                    <button 
-                        onClick={() => setIsBulkAssignModalOpen(true)}
-                        disabled={selectedPackages.size === 0}
-                        title="Asignar Conductor" 
-                        className="p-2 rounded-full hover:bg-[var(--background-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <IconUserPlus className="w-5 h-5 text-[var(--text-secondary)]" />
-                    </button>
-                    <button 
-                        onClick={() => setPrintingPackages(selectedPackageObjects)} 
-                        title="Imprimir Etiquetas" 
-                        className="p-2 rounded-full hover:bg-[var(--background-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={selectedPackages.size === 0}>
-                        <IconPrinter className="w-5 h-5 text-[var(--text-secondary)]" />
-                    </button>
-                    <button 
-                        onClick={() => setIsDeletePasswordModalOpen(true)} 
-                        disabled={!canDeleteSelected} 
-                        title="Eliminar Seleccionados" 
-                        className="p-2 rounded-full hover:bg-[var(--background-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <IconTrash className="w-5 h-5 text-[var(--text-secondary)]" />
-                    </button>
-                    <button 
-                        onClick={handleExportExcel} 
-                        title="Exportar Vista a Excel" 
-                        className="p-2 rounded-full hover:bg-[var(--background-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={totalPackages === 0}>
-                        <IconFileSpreadsheet className="w-5 h-5 text-[var(--text-secondary)]" />
-                    </button>
-                </div>
-            </div>
-            
-            <div className="flex items-center justify-start flex-wrap gap-x-6 gap-y-3">
-                <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-[var(--text-secondary)] whitespace-nowrap">Ver:</label>
-                    <div className="relative w-40" ref={statusDropdownRef}>
-                        <button
-                            type="button"
-                            onClick={() => setIsStatusDropdownOpen(prev => !prev)}
-                            className={`w-full border rounded-md py-1.5 pl-3 pr-8 text-sm text-left focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--brand-secondary)] transition-colors ${getStatusSelectStyles(statusFilter)}`}
-                            aria-haspopup="listbox"
-                            aria-expanded={isStatusDropdownOpen}
-                        >
-                            <span className="block truncate">{statusOptions.find(o => o.value === statusFilter)?.label || 'Todos'}</span>
-                            <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                                <IconChevronDown className="w-5 h-5 text-[var(--text-muted)]" />
-                            </span>
-                        </button>
-                        {isStatusDropdownOpen && (
-                            <ul className="absolute z-10 mt-1 w-full bg-[var(--background-secondary)] shadow-lg rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm text-[var(--text-primary)]">
-                                {statusOptions.filter(o => o.value !== statusFilter).map(({ label, value }) => (
-                                    <li
-                                        key={label}
-                                        onClick={() => {
-                                            setStatusFilter(value);
-                                            setIsStatusDropdownOpen(false);
-                                        }}
-                                        className={`cursor-pointer select-none relative py-2 pl-4 pr-4 transition-colors font-medium rounded-sm mx-1 ${getStatusOptionClasses(value)}`}
-                                    >
-                                        {label}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                </div>
-                 <div className="flex items-center gap-2">
-                    <label htmlFor="client-filter-select" className="text-sm font-medium text-[var(--text-secondary)] whitespace-nowrap">Cliente:</label>
-                    <select
-                        id="client-filter-select"
-                        value={clientFilter}
-                        onChange={(e) => setClientFilter(e.target.value)}
-                        className="w-48 border rounded-md py-1.5 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--brand-secondary)] transition-colors bg-[var(--background-secondary)] border-[var(--border-secondary)] text-[var(--text-primary)]"
-                        aria-label="Filtrar por cliente"
-                    >
-                        <option value="">Todos los Clientes</option>
-                        {clients.map(client => (
-                            <option key={client.id} value={client.id}>{client.name}</option>
-                        ))}
-                    </select>
-                </div>
-            </div>
 
-            <div className="flex-1 text-center">
-                <span className="text-sm font-bold text-[var(--brand-primary)]">Total de paquetes en sistema: {totalPackages}</span>
-            </div>
-
-            {totalPackages > 0 && (
-                <div className="text-sm text-[var(--text-secondary)]">
-                    <div className="flex flex-wrap items-center justify-end gap-4">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-3 p-3 border-b border-[var(--border-primary)]">
+                    <div className="flex flex-wrap items-center gap-4">
+                        <input
+                            type="checkbox"
+                            ref={checkboxRef}
+                            className={customCheckboxClass}
+                            checked={isAllOnPageSelected}
+                            onChange={handleSelectAllOnPageClick}
+                            disabled={packages.length === 0}
+                        />
+                        <div className="h-6 w-px bg-[var(--border-primary)]"></div>
                         <div className="flex items-center gap-2">
-                            <label htmlFor="items-per-page-admin" className="text-[var(--text-secondary)] whitespace-nowrap">Filas por página:</label>
-                            <select
-                                id="items-per-page-admin"
-                                value={itemsPerPage}
-                                onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                                className="bg-[var(--background-secondary)] border border-[var(--border-secondary)] text-[var(--text-primary)] rounded-md py-1 pl-2 pr-7 text-sm focus:ring-[var(--brand-secondary)] focus:border-[var(--brand-secondary)]"
-                                aria-label="Filas por página"
+                            {selectedPackages.size > 0 && (
+                                <span className="text-sm font-semibold text-[var(--text-primary)]">{selectedPackages.size} seleccionados</span>
+                            )}
+                            <button
+                                onClick={() => setIsMultiDriverOptimizerOpen(true)}
+                                disabled={selectedPackages.size === 0}
+                                title="Reparto Inteligente (Optimizado)"
+                                className="p-2 rounded-full hover:bg-[var(--background-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-indigo-600"
                             >
-                                <option value={10}>10</option>
-                                <option value={25}>25</option>
-                                <option value={50}>50</option>
-                                <option value={100}>100</option>
+                                <IconRoute className="w-5 h-5" />
+                            </button>
+                            <button
+                                onClick={() => setIsBulkAssignModalOpen(true)}
+                                disabled={selectedPackages.size === 0}
+                                title="Asignar Conductor"
+                                className="p-2 rounded-full hover:bg-[var(--background-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <IconUserPlus className="w-5 h-5 text-[var(--text-secondary)]" />
+                            </button>
+                            <button
+                                onClick={() => setPrintingPackages(selectedPackageObjects)}
+                                title="Imprimir Etiquetas"
+                                className="p-2 rounded-full hover:bg-[var(--background-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={selectedPackages.size === 0}>
+                                <IconPrinter className="w-5 h-5 text-[var(--text-secondary)]" />
+                            </button>
+                            <button
+                                onClick={() => setIsDeletePasswordModalOpen(true)}
+                                disabled={!canDeleteSelected}
+                                title="Eliminar Seleccionados"
+                                className="p-2 rounded-full hover:bg-[var(--background-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                <IconTrash className="w-5 h-5 text-[var(--text-secondary)]" />
+                            </button>
+                            <button
+                                onClick={handleExportExcel}
+                                title="Exportar Vista a Excel"
+                                className="p-2 rounded-full hover:bg-[var(--background-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={totalPackages === 0}>
+                                <IconFileSpreadsheet className="w-5 h-5 text-[var(--text-secondary)]" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-start flex-wrap gap-x-6 gap-y-3">
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-[var(--text-secondary)] whitespace-nowrap">Ver:</label>
+                            <div className="relative w-40" ref={statusDropdownRef}>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsStatusDropdownOpen(prev => !prev)}
+                                    className={`w-full border rounded-md py-1.5 pl-3 pr-8 text-sm text-left focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--brand-secondary)] transition-colors ${getStatusSelectStyles(statusFilter)}`}
+                                    aria-haspopup="listbox"
+                                    aria-expanded={isStatusDropdownOpen}
+                                >
+                                    <span className="block truncate">{statusOptions.find(o => o.value === statusFilter)?.label || 'Todos'}</span>
+                                    <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                                        <IconChevronDown className="w-5 h-5 text-[var(--text-muted)]" />
+                                    </span>
+                                </button>
+                                {isStatusDropdownOpen && (
+                                    <ul className="absolute z-10 mt-1 w-full bg-[var(--background-secondary)] shadow-lg rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm text-[var(--text-primary)]">
+                                        {statusOptions.filter(o => o.value !== statusFilter).map(({ label, value }) => (
+                                            <li
+                                                key={label}
+                                                onClick={() => {
+                                                    setStatusFilter(value);
+                                                    setIsStatusDropdownOpen(false);
+                                                }}
+                                                className={`cursor-pointer select-none relative py-2 pl-4 pr-4 transition-colors font-medium rounded-sm mx-1 ${getStatusOptionClasses(value)}`}
+                                            >
+                                                {label}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="client-filter-select" className="text-sm font-medium text-[var(--text-secondary)] whitespace-nowrap">Cliente:</label>
+                            <select
+                                id="client-filter-select"
+                                value={clientFilter}
+                                onChange={(e) => setClientFilter(e.target.value)}
+                                className="w-48 border rounded-md py-1.5 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--brand-secondary)] transition-colors bg-[var(--background-secondary)] border-[var(--border-secondary)] text-[var(--text-primary)]"
+                                aria-label="Filtrar por cliente"
+                            >
+                                <option value="">Todos los Clientes</option>
+                                {clients.map(client => (
+                                    <option key={client.id} value={client.id}>{client.name}</option>
+                                ))}
                             </select>
                         </div>
-                        
-                        <span className="whitespace-nowrap">
-                            {Math.min((currentPage - 1) * itemsPerPage + 1, totalPackages)}-{Math.min(currentPage * itemsPerPage, totalPackages)} de {totalPackages}
-                        </span>
-                        <div className="flex items-center">
-                            <button onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1} className="p-2 disabled:opacity-50" aria-label="Página anterior">
-                                <IconChevronLeft className="w-5 h-5" />
-                            </button>
-                            <button onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage * itemsPerPage >= totalPackages} className="p-2 disabled:opacity-50" aria-label="Página siguiente">
-                                <IconChevronRight className="w-5 h-5" />
-                            </button>
-                        </div>
                     </div>
+
+                    <div className="flex-1 text-center">
+                        <span className="text-sm font-bold text-[var(--brand-primary)]">Total de paquetes en sistema: {totalPackages}</span>
+                    </div>
+
+                    {totalPackages > 0 && (
+                        <div className="text-sm text-[var(--text-secondary)]">
+                            <div className="flex flex-wrap items-center justify-end gap-4">
+                                <div className="flex items-center gap-2">
+                                    <label htmlFor="items-per-page-admin" className="text-[var(--text-secondary)] whitespace-nowrap">Filas por página:</label>
+                                    <select
+                                        id="items-per-page-admin"
+                                        value={itemsPerPage}
+                                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                                        className="bg-[var(--background-secondary)] border border-[var(--border-secondary)] text-[var(--text-primary)] rounded-md py-1 pl-2 pr-7 text-sm focus:ring-[var(--brand-secondary)] focus:border-[var(--brand-secondary)]"
+                                        aria-label="Filas por página"
+                                    >
+                                        <option value={10}>10</option>
+                                        <option value={25}>25</option>
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                    </select>
+                                </div>
+
+                                <span className="whitespace-nowrap">
+                                    {Math.min((currentPage - 1) * itemsPerPage + 1, totalPackages)}-{Math.min(currentPage * itemsPerPage, totalPackages)} de {totalPackages}
+                                </span>
+                                <div className="flex items-center">
+                                    <button onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1} className="p-2 disabled:opacity-50" aria-label="Página anterior">
+                                        <IconChevronLeft className="w-5 h-5" />
+                                    </button>
+                                    <button onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage * itemsPerPage >= totalPackages} className="p-2 disabled:opacity-50" aria-label="Página siguiente">
+                                        <IconChevronRight className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
+
+                <PackageList
+                    packages={packages}
+                    users={users}
+                    isLoading={isLoading}
+                    onSelectPackage={setSelectedPackage}
+                    onAssignPackage={auth?.user?.role === 'ADMIN' ? setAssigningPackage : undefined}
+                    onEditPackage={auth?.user?.role === 'ADMIN' ? setEditingPackage : undefined}
+                    onDeletePackage={(pkg) => { setSelectedPackages(new Set([pkg.id])); setIsDeletePasswordModalOpen(true); }}
+                    onPrintLabel={(pkg) => setPrintingPackages([pkg])}
+                    onMarkForReturn={auth?.user?.role === 'ADMIN' ? handleMarkForReturn : undefined}
+                    isFiltering={searchQuery !== '' || statusFilter !== null || driverFilter !== '' || communeFilter !== '' || cityFilter !== '' || startDate !== '' || endDate !== ''}
+                    isDateFiltering={isDateFiltering}
+                    selectedPackages={selectedPackages}
+                    onSelectionChange={handleSelectPackage}
+                />
+            </div>
+
+            {/* --- Modals --- */}
+            {selectedPackage && (
+                <PackageDetailModal
+                    pkg={selectedPackage}
+                    onClose={() => setSelectedPackage(null)}
+                    driver={users.find(u => u.id === selectedPackage.driverId)}
+                    creator={users.find(u => u.id === selectedPackage.creatorId)}
+                />
+            )}
+            {assigningPackage && (
+                <AssignDriverModal
+                    pkg={assigningPackage}
+                    drivers={drivers}
+                    onClose={() => setAssigningPackage(null)}
+                    onAssign={handleAssignDriver}
+                />
+            )}
+            {isBulkAssignModalOpen && (
+                <BulkAssignDriverModal
+                    packageCount={selectedPackages.size}
+                    drivers={drivers}
+                    onClose={() => setIsBulkAssignModalOpen(false)}
+                    onAssign={handleBulkAssignDriver}
+                />
+            )}
+            {isMultiDriverOptimizerOpen && currentLocation && (
+                <MultiDriverOptimizerModal
+                    packages={packages.filter((p: Package) => selectedPackages.has(p.id))}
+                    drivers={drivers.filter((d: User) => d.role === Role.Driver)}
+                    userLocation={currentLocation}
+                    onClose={() => setIsMultiDriverOptimizerOpen(false)}
+                    onConfirmAssignment={handleConfirmMultiDriverAssignment}
+                />
+            )}
+            {isCreateModalOpen && (
+                <CreatePackageModal
+                    onClose={() => setIsCreateModalOpen(false)}
+                    onCreate={handleCreatePackage}
+                    clients={clients}
+                />
+            )}
+            {isImportModalOpen && (
+                <ImportPackagesModal
+                    onClose={() => setIsImportModalOpen(false)}
+                    onImport={handleImportPackages}
+                    clients={clients}
+                />
+            )}
+            {editingPackage && (
+                <EditPackageModal
+                    pkg={editingPackage}
+                    onClose={() => setEditingPackage(null)}
+                    onUpdate={handleUpdatePackage}
+                />
+            )}
+            {isDeletePasswordModalOpen && (
+                <DeletePasswordModal
+                    onClose={() => setIsDeletePasswordModalOpen(false)}
+                    onConfirm={handleDeleteSelected}
+                />
+            )}
+            {printingPackages.length > 0 && auth?.user && (
+                printingPackages.length === 1 ? (
+                    <ShippingLabelModal
+                        pkg={printingPackages[0]}
+                        creatorName={users.find(u => u.id === printingPackages[0].creatorId)?.name || 'Cliente Desconocido'}
+                        onClose={() => setPrintingPackages([])}
+                    />
+                ) : (
+                    <BatchShippingLabelModal
+                        packages={printingPackages}
+                        creatorName={users.find(u => u.id === printingPackages[0].creatorId)?.name || 'Cliente Desconocido'}
+                        onClose={() => setPrintingPackages([])}
+                    />
+                )
+            )}
+
+            {isOptimizerOpen && (
+                <RouteOptimizerModal
+                    packages={packages.filter(p => !driverFilter || p.driverId === driverFilter)}
+                    onClose={() => setIsOptimizerOpen(false)}
+                    onApplyRoute={handleApplyOptimizedRoute}
+                    userLocation={currentLocation}
+                />
             )}
         </div>
-
-        <PackageList 
-          packages={packages} 
-          users={users}
-          isLoading={isLoading}
-          onSelectPackage={setSelectedPackage}
-          onAssignPackage={auth?.user?.role === 'ADMIN' ? setAssigningPackage : undefined}
-          onEditPackage={auth?.user?.role === 'ADMIN' ? setEditingPackage : undefined}
-          onDeletePackage={(pkg) => { setSelectedPackages(new Set([pkg.id])); setIsDeletePasswordModalOpen(true); }}
-          onPrintLabel={(pkg) => setPrintingPackages([pkg])}
-          onMarkForReturn={auth?.user?.role === 'ADMIN' ? handleMarkForReturn : undefined}
-          isFiltering={searchQuery !== '' || statusFilter !== null || driverFilter !== '' || communeFilter !== '' || cityFilter !== '' || startDate !== '' || endDate !== ''}
-          isDateFiltering={isDateFiltering}
-          selectedPackages={selectedPackages}
-          onSelectionChange={handleSelectPackage}
-        />
-      </div>
-
-      {/* --- Modals --- */}
-      {selectedPackage && (
-        <PackageDetailModal 
-            pkg={selectedPackage} 
-            onClose={() => setSelectedPackage(null)} 
-            driver={users.find(u => u.id === selectedPackage.driverId)}
-            creator={users.find(u => u.id === selectedPackage.creatorId)}
-        />
-      )}
-      {assigningPackage && (
-        <AssignDriverModal
-            pkg={assigningPackage}
-            drivers={drivers}
-            onClose={() => setAssigningPackage(null)}
-            onAssign={handleAssignDriver}
-        />
-      )}
-      {isBulkAssignModalOpen && (
-        <BulkAssignDriverModal
-            packageCount={selectedPackages.size}
-            drivers={drivers}
-            onClose={() => setIsBulkAssignModalOpen(false)}
-            onAssign={handleBulkAssignDriver}
-        />
-      )}
-      {isCreateModalOpen && (
-        <CreatePackageModal
-            onClose={() => setIsCreateModalOpen(false)}
-            onCreate={handleCreatePackage}
-            clients={clients}
-        />
-      )}
-      {isImportModalOpen && (
-        <ImportPackagesModal
-            onClose={() => setIsImportModalOpen(false)}
-            onImport={handleImportPackages}
-            clients={clients}
-        />
-      )}
-      {editingPackage && (
-        <EditPackageModal
-            pkg={editingPackage}
-            onClose={() => setEditingPackage(null)}
-            onUpdate={handleUpdatePackage}
-        />
-      )}
-      {isDeletePasswordModalOpen && (
-        <DeletePasswordModal
-            onClose={() => setIsDeletePasswordModalOpen(false)}
-            onConfirm={handleDeleteSelected}
-        />
-      )}
-      {printingPackages.length > 0 && auth?.user && (
-          printingPackages.length === 1 ? (
-              <ShippingLabelModal
-                pkg={printingPackages[0]}
-                creatorName={users.find(u => u.id === printingPackages[0].creatorId)?.name || 'Cliente Desconocido'}
-                onClose={() => setPrintingPackages([])}
-              />
-          ) : (
-              <BatchShippingLabelModal
-                packages={printingPackages}
-                creatorName={users.find(u => u.id === printingPackages[0].creatorId)?.name || 'Cliente Desconocido'}
-                onClose={() => setPrintingPackages([])}
-              />
-          )
-      )}
-    </div>
-  );
+    );
 };
 
 export default Dashboard;

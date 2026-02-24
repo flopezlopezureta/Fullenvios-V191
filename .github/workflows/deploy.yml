@@ -40,3 +40,7 @@ jobs:
           export DOCKER_BUILDKIT=0
           docker build -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/fullenvios-antigravity:latest -f Dockerfile.prod .
           docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/fullenvios-antigravity:latest
+
+      - name: Trigger Coolify Deploy
+        run: |
+          curl -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}"

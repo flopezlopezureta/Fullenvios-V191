@@ -25,42 +25,57 @@ const DriverDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [isEndOfDayModalOpen, setIsEndOfDayModalOpen] = useState(false);
   const [isOptimizerOpen, setIsOptimizerOpen] = useState(false);
-  
+
   const auth = useContext(AuthContext);
   const isInitialLoad = useRef(true);
   const prevPackagesRef = useRef<Package[] | undefined>(undefined);
-  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | undefined>(undefined);
+  const optimizedOrderRef = useRef<string[] | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number, lng: number } | undefined>(undefined);
 
   const fetchData = async () => {
-      if (!auth?.user) return;
+    if (!auth?.user) return;
+    if (isInitialLoad.current) {
+      setIsLoading(true);
+    }
+    try {
+      // Fetch all packages for the current driver, without pagination
+      const { packages: pkgs } = await api.getPackages({ driverFilter: auth.user.id, limit: 0 });
+
+      if (optimizedOrderRef.current) {
+        const pkgsMap = new Map<string, Package>(pkgs.map((p: Package) => [p.id, p]));
+        const reorderedPkgs = optimizedOrderRef.current
+          .map((id: string) => pkgsMap.get(id))
+          .filter((p: Package | undefined): p is Package => !!p);
+
+        const optimizedIds = new Set<string>(optimizedOrderRef.current);
+        const newPkgs = pkgs.filter((p: Package) => !optimizedIds.has(p.id));
+
+        setMyPackages([...reorderedPkgs, ...newPkgs]);
+      } else {
+        setMyPackages(pkgs);
+      }
+
+      const allUsers = await api.getUsers();
+      setUsers(allUsers);
+    } catch (error) {
+      console.error("Failed to fetch driver data", error);
+    } finally {
       if (isInitialLoad.current) {
-        setIsLoading(true);
+        setIsLoading(false);
+        isInitialLoad.current = false;
       }
-      try {
-          // Fetch all packages for the current driver, without pagination
-          const { packages: pkgs } = await api.getPackages({ driverFilter: auth.user.id, limit: 0 });
-          setMyPackages(pkgs); // The data from API is already filtered by driver
-          const allUsers = await api.getUsers();
-          setUsers(allUsers);
-      } catch (error) {
-          console.error("Failed to fetch driver data", error);
-      } finally {
-          if (isInitialLoad.current) {
-            setIsLoading(false);
-            isInitialLoad.current = false;
-          }
-      }
+    }
   };
 
   useEffect(() => {
     fetchData();
     const intervalId = setInterval(fetchData, 10000);
-    
+
     // Get current location for optimizer
     if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(pos => {
-            setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        });
+      navigator.geolocation.getCurrentPosition(pos => {
+        setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      });
     }
 
     return () => clearInterval(intervalId);
@@ -84,24 +99,24 @@ const DriverDashboard: React.FC = () => {
     if (allProcessedNow && !allProcessedBefore) {
       setIsEndOfDayModalOpen(true);
     }
-    
+
     prevPackagesRef.current = myPackages;
   }, [myPackages]);
-  
+
   const { pendingPackages, dailyHistoryPackages } = useMemo(() => {
     const todayStr = new Date().toDateString();
-    
-    const pending = myPackages.filter(p => 
-        p.status !== PackageStatus.Delivered && p.status !== PackageStatus.Problem && p.status !== PackageStatus.Returned
+
+    const pending = myPackages.filter((p: Package) =>
+      p.status !== PackageStatus.Delivered && p.status !== PackageStatus.Problem && p.status !== PackageStatus.Returned
     );
 
-    const history = myPackages.filter(p => {
-        if (p.status !== PackageStatus.Delivered && p.status !== PackageStatus.Problem) return false;
-        
-        const closureEvent = p.history[0]; // Most recent event determines the date
-        if (!closureEvent) return false; 
-        
-        return new Date(closureEvent.timestamp).toDateString() === todayStr;
+    const history = myPackages.filter((p: Package) => {
+      if (p.status !== PackageStatus.Delivered && p.status !== PackageStatus.Problem) return false;
+
+      const closureEvent = p.history[0]; // Most recent event determines the date
+      if (!closureEvent) return false;
+
+      return new Date(closureEvent.timestamp).toDateString() === todayStr;
     });
 
     return { pendingPackages: pending, dailyHistoryPackages: history };
@@ -120,43 +135,43 @@ const DriverDashboard: React.FC = () => {
   const handleConfirmDelivery = async (pkgId: string, data: DeliveryConfirmationData) => {
     try {
       const updatedPackage = await api.confirmDelivery(pkgId, data);
-      setMyPackages(prev => prev.map(p => p.id === pkgId ? updatedPackage : p));
+      setMyPackages((prev: Package[]) => prev.map((p: Package) => p.id === pkgId ? updatedPackage : p));
       setDeliveringPackage(null);
 
       // --- NEW NOTIFICATION LOGIC ---
       if (auth?.systemSettings.messagingPlan && auth.systemSettings.messagingPlan !== MessagingPlan.None) {
-          const creator = users.find(u => u.id === updatedPackage.creatorId);
-          if (creator) {
-              const message = `Hola ${creator.name}, te informamos que tu paquete con ID ${updatedPackage.id} para ${updatedPackage.recipientName} ha sido entregado exitosamente.`;
-              if (auth.systemSettings.messagingPlan === MessagingPlan.WhatsApp && creator.phone) {
-                  const whatsappUrl = `https://wa.me/${creator.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-                  window.open(whatsappUrl, '_blank');
-              } else if (auth.systemSettings.messagingPlan === MessagingPlan.Email && creator.email) {
-                  const subject = `Paquete Entregado: ${updatedPackage.id}`;
-                  const mailtoUrl = `mailto:${creator.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
-                  window.open(mailtoUrl, '_blank');
-              }
+        const creator = users.find((u: User) => u.id === updatedPackage.creatorId);
+        if (creator) {
+          const message = `Hola ${creator.name}, te informamos que tu paquete con ID ${updatedPackage.id} para ${updatedPackage.recipientName} ha sido entregado exitosamente.`;
+          if (auth.systemSettings.messagingPlan === MessagingPlan.WhatsApp && creator.phone) {
+            const whatsappUrl = `https://wa.me/${creator.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+            window.open(whatsappUrl, '_blank');
+          } else if (auth.systemSettings.messagingPlan === MessagingPlan.Email && creator.email) {
+            const subject = `Paquete Entregado: ${updatedPackage.id}`;
+            const mailtoUrl = `mailto:${creator.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+            window.open(mailtoUrl, '_blank');
           }
+        }
       }
       // --- END NEW LOGIC ---
 
     } catch (error: any) {
-        console.error("Failed to confirm delivery", error);
-        throw error;
+      console.error("Failed to confirm delivery", error);
+      throw error;
     }
   };
 
   const handleConfirmProblem = async (pkgId: string, reason: string, photos: string[]) => {
     try {
-        const updatedPackage = await api.markPackageAsProblem(pkgId, reason, photos);
-        setMyPackages(prev => prev.map(p => p.id === pkgId ? updatedPackage : p));
-        setReportingProblemPackage(null);
+      const updatedPackage = await api.markPackageAsProblem(pkgId, reason, photos);
+      setMyPackages((prev: Package[]) => prev.map((p: Package) => p.id === pkgId ? updatedPackage : p));
+      setReportingProblemPackage(null);
     } catch (error: any) {
-        console.error("Failed to report problem", error);
-        throw error;
+      console.error("Failed to report problem", error);
+      throw error;
     }
   };
-  
+
   const handleExportRoute = () => {
     if (!auth?.user || pendingPackages.length === 0) return;
 
@@ -165,39 +180,36 @@ const DriverDashboard: React.FC = () => {
 
     // Export simplified CSV for Circuit with only Address and Name
     const escapeCsvField = (field: any) => {
-        const str = String(field || '').replace(/"/g, '""');
-        return `"${str}"`;
+      const str = String(field || '').replace(/"/g, '""');
+      return `"${str}"`;
     };
     const circuitHeaders = ['Address', 'Name'];
-    const circuitRows = pendingPackages.map(p => [
-        `${p.recipientAddress}, ${p.recipientCommune}, ${p.recipientCity}`,
-        p.recipientName
+    const circuitRows = pendingPackages.map((p: Package) => [
+      `${p.recipientAddress}, ${p.recipientCommune}, ${p.recipientCity}`,
+      p.recipientName
     ].map(escapeCsvField).join(','));
 
     const csvContent = [circuitHeaders.join(','), ...circuitRows].join('\n');
     const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Excel compatibility
     const link = document.createElement("a");
     if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `Circuit_${driverName}_${dateStr}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Circuit_${driverName}_${dateStr}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
   const handleApplyOptimizedRoute = (sortedPackages: Package[]) => {
-      // Create a new array for all packages, preserving non-pending ones in their original place (roughly)
-      // and replacing the pending ones with the sorted version.
-      
-      // For simplicity in UI, we just update the local state `myPackages` to reflect the order
-      // of the sorted pending packages at the top or replacing the current pending segment.
-      
-      const otherPackages = myPackages.filter(p => !sortedPackages.find(sp => sp.id === p.id));
-      setMyPackages([...sortedPackages, ...otherPackages]);
-      setIsOptimizerOpen(false);
+    // Persist order locally for this session
+    optimizedOrderRef.current = sortedPackages.map(p => p.id);
+
+    const otherPackages = myPackages.filter((p: Package) => !sortedPackages.find((sp: Package) => sp.id === p.id));
+    setMyPackages([...sortedPackages, ...otherPackages]);
+    setIsOptimizerOpen(false);
   };
 
 
@@ -211,27 +223,27 @@ const DriverDashboard: React.FC = () => {
     <div>
       <div className="flex justify-end items-center mb-4 px-4 flex-wrap gap-2">
         <div className="flex items-center gap-2 w-full sm:w-auto">
-            {activeTab === 'pending' && (
-                <button
-                    onClick={() => setIsOptimizerOpen(true)}
-                    disabled={pendingPackages.length < 2}
-                    className="flex-1 sm:flex-none inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
-                >
-                    <IconRoute className="w-5 h-5 mr-2 -ml-1"/>
-                    Optimizar Ruta
-                </button>
-            )}
+          {activeTab === 'pending' && (
             <button
-                onClick={handleExportRoute}
-                disabled={pendingPackages.length === 0}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-[var(--text-on-brand)] bg-[var(--brand-primary)] hover:bg-[var(--brand-secondary)] disabled:bg-slate-400 disabled:cursor-not-allowed"
+              onClick={() => setIsOptimizerOpen(true)}
+              disabled={pendingPackages.length < 2}
+              className="flex-1 sm:flex-none inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
             >
-                <IconFileExport className="w-5 h-5 mr-2 -ml-1"/>
-                Exportar
+              <IconRoute className="w-5 h-5 mr-2 -ml-1" />
+              Optimizar Ruta
             </button>
+          )}
+          <button
+            onClick={handleExportRoute}
+            disabled={pendingPackages.length === 0}
+            className="flex-1 sm:flex-none inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-[var(--text-on-brand)] bg-[var(--brand-primary)] hover:bg-[var(--brand-secondary)] disabled:bg-slate-400 disabled:cursor-not-allowed"
+          >
+            <IconFileExport className="w-5 h-5 mr-2 -ml-1" />
+            Exportar
+          </button>
         </div>
         <span className="ml-auto bg-[var(--brand-primary)] text-[var(--text-on-brand)] text-xs font-bold px-3 py-1.5 rounded-full whitespace-nowrap">
-            Asignados Hoy: {totalAssignedForDay}
+          Asignados Hoy: {totalAssignedForDay}
         </span>
       </div>
 
@@ -254,32 +266,32 @@ const DriverDashboard: React.FC = () => {
             </button>
           </nav>
         </div>
-        <PackageList 
-            packages={packagesToShow} 
-            users={users}
-            isLoading={isLoading}
-            onSelectPackage={setSelectedPackage}
-            hideDriverName={true}
-            isFiltering={activeTab === 'history'}
+        <PackageList
+          packages={packagesToShow}
+          users={users}
+          isLoading={isLoading}
+          onSelectPackage={setSelectedPackage}
+          hideDriverName={true}
+          isFiltering={activeTab === 'history'}
         />
       </div>
 
       {selectedPackage && (
-        <PackageDetailModal 
-            isFullScreen={true}
-            pkg={selectedPackage} 
-            onClose={() => setSelectedPackage(null)}
-            driver={users.find(u => u.id === selectedPackage.driverId)}
-            creator={users.find(u => u.id === selectedPackage.creatorId)}
-            companyName={auth?.systemSettings.companyName}
-            onStartDelivery={(pkg) => {
-                setSelectedPackage(null);
-                handleStartDelivery(pkg);
-            }}
-            onReportProblem={(pkg) => {
-                setSelectedPackage(null);
-                handleReportProblem(pkg);
-            }}
+        <PackageDetailModal
+          isFullScreen={true}
+          pkg={selectedPackage}
+          onClose={() => setSelectedPackage(null)}
+          driver={users.find(u => u.id === selectedPackage.driverId)}
+          creator={users.find(u => u.id === selectedPackage.creatorId)}
+          companyName={auth?.systemSettings.companyName}
+          onStartDelivery={(pkg) => {
+            setSelectedPackage(null);
+            handleStartDelivery(pkg);
+          }}
+          onReportProblem={(pkg) => {
+            setSelectedPackage(null);
+            handleReportProblem(pkg);
+          }}
         />
       )}
 
@@ -301,20 +313,20 @@ const DriverDashboard: React.FC = () => {
 
       {isEndOfDayModalOpen && auth?.user && (
         <EndOfDayReportModal
-            onClose={() => setIsEndOfDayModalOpen(false)}
-            packages={myPackages}
-            driverName={auth.user.name}
-            users={users}
+          onClose={() => setIsEndOfDayModalOpen(false)}
+          packages={myPackages}
+          driverName={auth.user.name}
+          users={users}
         />
       )}
-      
+
       {isOptimizerOpen && (
-          <RouteOptimizerModal
-            packages={pendingPackages}
-            onClose={() => setIsOptimizerOpen(false)}
-            onApplyRoute={handleApplyOptimizedRoute}
-            userLocation={currentLocation}
-          />
+        <RouteOptimizerModal
+          packages={pendingPackages}
+          onClose={() => setIsOptimizerOpen(false)}
+          onApplyRoute={handleApplyOptimizedRoute}
+          userLocation={currentLocation}
+        />
       )}
     </div>
   );

@@ -40,9 +40,9 @@ export const optimizeRoute = (packages: Package[], startLocation?: { lat: number
 
         // Fallback to city coordinates with jitter if specific coords missing
         if ((!lat || !lng) && pkg.recipientCity && cityCoordinates[pkg.recipientCity]) {
-             const baseCoords = cityCoordinates[pkg.recipientCity];
-             lat = baseCoords[0] + (Math.random() - 0.5) * 0.02;
-             lng = baseCoords[1] + (Math.random() - 0.5) * 0.02;
+            const baseCoords = cityCoordinates[pkg.recipientCity];
+            lat = baseCoords[0] + (Math.random() - 0.5) * 0.02;
+            lng = baseCoords[1] + (Math.random() - 0.5) * 0.02;
         }
 
         if (lat && lng) {
@@ -57,7 +57,7 @@ export const optimizeRoute = (packages: Package[], startLocation?: { lat: number
     const optimizedOrder: Package[] = [];
     const unvisited = [...points];
     let currentLocation = startLocation || { lat: unvisited[0].lat, lng: unvisited[0].lng };
-    
+
     if (!startLocation) {
         optimizedOrder.push(unvisited[0].pkg);
         unvisited.splice(0, 1);
@@ -95,7 +95,7 @@ export const optimizeMultiDriverRoute = (packages: Package[], driverCount: numbe
     const [endHour, endMinute] = endTimeStr.split(':').map(Number);
     const endDate = new Date();
     endDate.setHours(endHour, endMinute, 0, 0);
-    
+
     // If end time is before now (e.g. next day), add 24 hours. 
     // For simplicity, assume same day if time is later than now, otherwise just fail safe.
     if (endDate < now) {
@@ -103,7 +103,7 @@ export const optimizeMultiDriverRoute = (packages: Package[], driverCount: numbe
         // But usually user selects 21:00. If it's currently 22:00, time is negative.
         // We'll assume minimal operational time remaining if late.
     }
-    
+
     const maxDurationMinutes = Math.max(0, (endDate.getTime() - now.getTime()) / 60000);
 
     // 2. Prepare points
@@ -115,9 +115,9 @@ export const optimizeMultiDriverRoute = (packages: Package[], driverCount: numbe
         let lng = pkg.destLongitude;
 
         if ((!lat || !lng) && pkg.recipientCity && cityCoordinates[pkg.recipientCity]) {
-             const baseCoords = cityCoordinates[pkg.recipientCity];
-             lat = baseCoords[0] + (Math.random() - 0.5) * 0.02;
-             lng = baseCoords[1] + (Math.random() - 0.5) * 0.02;
+            const baseCoords = cityCoordinates[pkg.recipientCity];
+            lat = baseCoords[0] + (Math.random() - 0.5) * 0.02;
+            lng = baseCoords[1] + (Math.random() - 0.5) * 0.02;
         }
 
         if (lat && lng) {
@@ -140,7 +140,7 @@ export const optimizeMultiDriverRoute = (packages: Package[], driverCount: numbe
     // 4. K-Means Loop
     let clusters: Point[][] = Array.from({ length: driverCount }, () => []);
     const maxIterations = 20;
-    
+
     for (let iter = 0; iter < maxIterations; iter++) {
         clusters = Array.from({ length: driverCount }, () => []);
 
@@ -175,7 +175,7 @@ export const optimizeMultiDriverRoute = (packages: Package[], driverCount: numbe
     const optimizedRoutes: Package[][] = clusters.map(clusterPoints => {
         const clusterPackages = clusterPoints.map(p => p.pkg);
         const optimized = optimizeRoute(clusterPackages, startLocation);
-        
+
         // Time Limiting Logic
         const feasibleRoute: Package[] = [];
         let currentLat = startLocation.lat;
@@ -186,10 +186,10 @@ export const optimizeMultiDriverRoute = (packages: Package[], driverCount: numbe
             // Distance in km
             const lat = pkg.destLatitude || currentLat; // Fallback if optimized somehow lost coords
             const lng = pkg.destLongitude || currentLng;
-            
+
             const distKm = getDistance(currentLat, currentLng, lat, lng);
             const travelTimeMin = (distKm / AVG_SPEED_KMH) * 60;
-            
+
             if (accumulatedTime + travelTimeMin + TIME_PER_STOP_MINUTES <= maxDurationMinutes) {
                 accumulatedTime += travelTimeMin + TIME_PER_STOP_MINUTES;
                 feasibleRoute.push(pkg);
@@ -209,4 +209,37 @@ export const optimizeMultiDriverRoute = (packages: Package[], driverCount: numbe
     });
 
     return optimizedRoutes.filter(route => route.length > 0);
+};
+
+export interface RouteStats {
+    totalDistanceKm: number;
+    estimatedDurationMinutes: number;
+}
+
+export const calculateRouteStats = (packages: Package[], startLocation: { lat: number, lng: number }): RouteStats => {
+    let totalDistanceKm = 0;
+    let currentLat = startLocation.lat;
+    let currentLng = startLocation.lng;
+    let stopCount = 0;
+
+    packages.forEach(pkg => {
+        const lat = pkg.destLatitude;
+        const lng = pkg.destLongitude;
+
+        if (lat && lng) {
+            totalDistanceKm += getDistance(currentLat, currentLng, lat, lng);
+            currentLat = lat;
+            currentLng = lng;
+            stopCount++;
+        }
+    });
+
+    // driving time at AVG_SPEED_KMH + service time per stop
+    const drivingTimeMinutes = (totalDistanceKm / AVG_SPEED_KMH) * 60;
+    const estimatedDurationMinutes = (stopCount * TIME_PER_STOP_MINUTES) + drivingTimeMinutes;
+
+    return {
+        totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
+        estimatedDurationMinutes: Math.round(estimatedDurationMinutes)
+    };
 };

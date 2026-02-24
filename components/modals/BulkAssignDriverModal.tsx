@@ -7,25 +7,26 @@ interface BulkAssignDriverModalProps {
   packageCount: number;
   drivers: User[];
   onClose: () => void;
-  onAssign: (driverId: string, newDeliveryDate: Date) => void;
+  onAssign: (driverId: string, newDeliveryDate: Date, autoOptimize: boolean) => void;
 }
 
 const formatDateForInput = (date: Date): string => {
-    const d = new Date(date);
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().split('T')[0];
+  const d = new Date(date);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split('T')[0];
 };
 
 const BulkAssignDriverModal: React.FC<BulkAssignDriverModalProps> = ({ packageCount, drivers, onClose, onAssign }) => {
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
   const [deliveryDate, setDeliveryDate] = useState<string>(formatDateForInput(new Date()));
+  const [autoOptimize, setAutoOptimize] = useState<boolean>(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDriverId) return;
     const [year, month, day] = deliveryDate.split('-').map(Number);
     const localDate = new Date(year, month - 1, day);
-    onAssign(selectedDriverId, localDate);
+    onAssign(selectedDriverId, localDate, autoOptimize);
   };
 
   const today = formatDateForInput(new Date());
@@ -56,9 +57,21 @@ const BulkAssignDriverModal: React.FC<BulkAssignDriverModalProps> = ({ packageCo
             <div>
               <label htmlFor="bulk-delivery-date" className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Fecha de Entrega</label>
               <div className="relative">
-                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><IconCalendar className="h-5 w-5 text-[var(--text-muted)]" /></div>
-                 <input type="date" id="bulk-delivery-date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} min={today} required className="mt-1 block w-full pl-10 pr-3 py-2 text-base border-[var(--border-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-secondary)] sm:text-sm rounded-md bg-[var(--background-secondary)] text-[var(--text-primary)]" />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><IconCalendar className="h-5 w-5 text-[var(--text-muted)]" /></div>
+                <input type="date" id="bulk-delivery-date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} min={today} required className="mt-1 block w-full pl-10 pr-3 py-2 text-base border-[var(--border-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-secondary)] sm:text-sm rounded-md bg-[var(--background-secondary)] text-[var(--text-primary)]" />
               </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+              <input
+                type="checkbox"
+                id="auto-optimize"
+                checked={autoOptimize}
+                onChange={(e) => setAutoOptimize(e.target.checked)}
+                className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              />
+              <label htmlFor="auto-optimize" className="text-sm font-medium text-indigo-900 cursor-pointer">
+                Optimizar ruta automáticamente al asignar
+              </label>
             </div>
           </div>
           <footer className="px-6 py-4 bg-[var(--background-muted)] rounded-b-xl flex justify-end">

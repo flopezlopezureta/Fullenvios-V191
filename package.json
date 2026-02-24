@@ -1,7 +1,7 @@
 {
   "name": "full-envios-app",
-  "version": "1.5.2",
-  "versionComment": "Versión 1.5.2: Recuperación de base de datos y usuarios completada.",
+  "version": "1.6.5",
+  "versionComment": "Versión 1.6.5: Actualización solicitada por el usuario.",
   "private": true,
   "description": "Sistema de seguimiento de paquetes full-stack.",
   "scripts": {
