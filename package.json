@@ -1,7 +1,7 @@
 {
   "name": "full-envios-app",
-  "version": "1.8.0",
-  "versionComment": "Versión 1.8.0: Limpieza de interfaz de conductor y eliminación de Test Scanner.",
+  "version": "1.8.1",
+  "versionComment": "Versión 1.8.1: Correcciones menores y estabilización.",
   "private": true,
   "description": "Sistema de seguimiento de paquetes full-stack.",
   "scripts": {
