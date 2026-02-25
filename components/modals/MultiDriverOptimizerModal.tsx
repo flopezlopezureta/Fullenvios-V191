@@ -6,6 +6,17 @@ import { optimizeMultiDriverRoute, calculateRouteStats, RouteStats } from '../..
 import { cityCoordinates } from '../../services/api';
 
 declare const L: any;
+declare namespace L {
+    namespace Routing {
+        function control(options: any): any;
+    }
+    function map(id: string | HTMLElement, options?: any): any;
+    function tileLayer(urlTemplate: string, options?: any): any;
+    function marker(latlng: any, options?: any): any;
+    function divIcon(options: any): any;
+    function latLng(lat: number, lng: number): any;
+    function latLngBounds(latlngs: any): any;
+}
 
 interface MultiDriverOptimizerModalProps {
     packages: Package[];
