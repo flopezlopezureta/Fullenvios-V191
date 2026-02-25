@@ -36,10 +36,10 @@ jobs:
 
       - name: Build and push Docker image (Lightweight Pack)
         run: |
-          # Usamos el constructor clásico para evitar errores de rpc/EOF
+          # Usamos un nombre de imagen fijo y limpio (fullenvios-app)
           export DOCKER_BUILDKIT=0
-          docker build -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/fullenvios-antigravity:latest -f Dockerfile.prod .
-          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/fullenvios-antigravity:latest
+          docker build -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/fullenvios-app:latest -f Dockerfile.prod .
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/fullenvios-app:latest
 
       - name: Trigger Coolify Deploy
         run: |
