@@ -43,4 +43,5 @@ jobs:
 
       - name: Trigger Coolify Deploy
         run: |
-          curl -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}"
+          # Intentamos avisar al servidor. Si falla por red, no bloqueamos el éxito del build.
+          curl -fsSL --connect-timeout 10 --max-time 20 "${{ secrets.COOLIFY_WEBHOOK_URL }}" || echo "Webhook timed out, but build is successful."
