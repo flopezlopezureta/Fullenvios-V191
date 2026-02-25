@@ -1,7 +1,7 @@
 {
   "name": "full-envios-app",
-  "version": "1.6.5",
-  "versionComment": "Versión 1.6.5: Actualización solicitada por el usuario.",
+  "version": "1.7.0",
+  "versionComment": "Versión 1.7.0: Finalización de la Fase 1 de Optimización de Rutas (VRP e IA).",
   "private": true,
   "description": "Sistema de seguimiento de paquetes full-stack.",
   "scripts": {
