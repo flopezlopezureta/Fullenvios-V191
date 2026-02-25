@@ -1,14 +1,15 @@
 {
   "name": "full-envios-app",
-  "version": "1.7.0",
-  "versionComment": "Versión 1.7.0: Finalización de la Fase 1 de Optimización de Rutas (VRP e IA).",
+  "version": "1.8.0",
+  "versionComment": "Versión 1.8.0: Limpieza de interfaz de conductor y eliminación de Test Scanner.",
   "private": true,
   "description": "Sistema de seguimiento de paquetes full-stack.",
   "scripts": {
     "start": "node server.js",
     "dev": "vite",
     "build": "vite build",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "postinstall": "npm run build"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

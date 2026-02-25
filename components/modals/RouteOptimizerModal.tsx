@@ -1,8 +1,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import type { Package } from '../../types';
-import { IconX, IconRoute, IconMapPin, IconCheckCircle, IconClock, IconMap } from '../Icon';
-import { optimizeRoute, calculateRouteStats, RouteStats } from '../../services/routeOptimizer';
+import { IconX, IconRoute, IconMapPin, IconCheckCircle } from '../Icon';
+import { optimizeRoute } from '../../services/routeOptimizer';
 import { cityCoordinates } from '../../services/api';
 
 declare const L: any;
@@ -16,7 +16,6 @@ interface RouteOptimizerModalProps {
 
 const RouteOptimizerModal: React.FC<RouteOptimizerModalProps> = ({ packages, onClose, onApplyRoute, userLocation }) => {
     const [optimizedPackages, setOptimizedPackages] = useState<Package[]>([]);
-    const [stats, setStats] = useState<RouteStats | null>(null);
     const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
     const mapRef = useRef<any>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -27,12 +26,6 @@ const RouteOptimizerModal: React.FC<RouteOptimizerModalProps> = ({ packages, onC
         const sorted = optimizeRoute(packages, userLocation);
         setOptimizedPackages(sorted);
     }, [packages, userLocation]);
-
-    useEffect(() => {
-        if (optimizedPackages.length > 0 && userLocation) {
-            setStats(calculateRouteStats(optimizedPackages, userLocation));
-        }
-    }, [optimizedPackages, userLocation]);
 
     // Initialize Map
     useEffect(() => {
@@ -68,14 +61,14 @@ const RouteOptimizerModal: React.FC<RouteOptimizerModalProps> = ({ packages, onC
         }
 
         // Add Packages
-        optimizedPackages.forEach((pkg: Package) => {
+        optimizedPackages.forEach((pkg) => {
             let lat = pkg.destLatitude;
             let lng = pkg.destLongitude;
-            // Fallback visual logic
+             // Fallback visual logic
             if ((!lat || !lng) && pkg.recipientCity && cityCoordinates[pkg.recipientCity]) {
-                const base = cityCoordinates[pkg.recipientCity];
-                lat = base[0];
-                lng = base[1];
+                 const base = cityCoordinates[pkg.recipientCity];
+                 lat = base[0]; 
+                 lng = base[1];
             }
 
             if (lat && lng) {
@@ -83,17 +76,17 @@ const RouteOptimizerModal: React.FC<RouteOptimizerModalProps> = ({ packages, onC
             }
         });
 
-        if (waypoints.length < 2 && !userLocation) return;
+        if (waypoints.length < 2 && !userLocation) return; 
 
         try {
             routingControlRef.current = L.Routing.control({
                 waypoints: waypoints,
                 plan: L.Routing.plan(waypoints, {
-                    createMarker: function (i: number, waypoint: any) {
+                    createMarker: function(i: number, waypoint: any) {
                         const isStart = userLocation && i === 0;
-
+                        
                         if (isStart) {
-                            return L.marker(waypoint.latLng, {
+                             return L.marker(waypoint.latLng, {
                                 draggable: false,
                                 icon: L.divIcon({
                                     html: `<div style="background-color: #10b981; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3);"></div>`,
@@ -101,11 +94,11 @@ const RouteOptimizerModal: React.FC<RouteOptimizerModalProps> = ({ packages, onC
                                 })
                             }).bindPopup("<b>Punto de Partida</b>");
                         }
-
+    
                         const pkgIndex = userLocation ? i - 1 : i;
                         const pkg = optimizedPackages[pkgIndex];
                         if (!pkg) return null; // Safety check
-
+    
                         return L.marker(waypoint.latLng, {
                             draggable: false,
                             icon: L.divIcon({
@@ -193,29 +186,10 @@ const RouteOptimizerModal: React.FC<RouteOptimizerModalProps> = ({ packages, onC
                         <div className="p-3 bg-[var(--background-muted)] border-b border-[var(--border-primary)]">
                             <h4 className="font-semibold text-sm text-[var(--text-secondary)]">Secuencia de Entrega</h4>
                         </div>
-
-                        {stats && (
-                            <div className="p-3 grid grid-cols-2 gap-2 border-b border-[var(--border-primary)] bg-indigo-50/50">
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Distancia</span>
-                                    <div className="flex items-center text-indigo-900">
-                                        <IconMap className="w-4 h-4 mr-1 opacity-70" />
-                                        <span className="text-sm font-bold">{stats.totalDistanceKm} km</span>
-                                    </div>
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Tiempo Est.</span>
-                                    <div className="flex items-center text-indigo-900">
-                                        <IconClock className="w-4 h-4 mr-1 opacity-70" />
-                                        <span className="text-sm font-bold">{Math.floor(stats.estimatedDurationMinutes / 60)}h {stats.estimatedDurationMinutes % 60}m</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
-                            {optimizedPackages.map((pkg: Package, index: number) => (
-                                <div
-                                    key={pkg.id}
+                            {optimizedPackages.map((pkg, index) => (
+                                <div 
+                                    key={pkg.id} 
                                     draggable
                                     onDragStart={() => onDragStart(index)}
                                     onDragOver={onDragOver}
