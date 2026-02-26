@@ -1,7 +1,7 @@
 {
   "name": "full-envios-app",
-  "version": "1.8.1",
-  "versionComment": "Versión 1.8.1: Correcciones menores y estabilización.",
+  "version": "1.8.5",
+  "versionComment": "Versión 1.8.5: Actualización de mantenimiento.",
   "private": true,
   "description": "Sistema de seguimiento de paquetes full-stack.",
   "scripts": {
