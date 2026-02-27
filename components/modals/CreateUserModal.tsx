@@ -54,6 +54,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreate, de
   const [billingAddress, setBillingAddress] = useState('');
   const [billingCommune, setBillingCommune] = useState('');
   const [billingGiro, setBillingGiro] = useState('');
+  const [billingPhone, setBillingPhone] = useState('');
   const [pickupCost, setPickupCost] = useState<number>(0);
   const [pricing, setPricing] = useState<UserPricing>({ sameDay: 0, express: 0, nextDay: 0 });
   
@@ -98,7 +99,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreate, de
             return;
         }
     } else if (defaultRole === Role.Client) {
-        if (!billingName || !billingRut || !billingAddress || !billingCommune || !billingGiro) {
+        if (!billingName || !billingRut || !billingAddress || !billingCommune || !billingGiro || !billingPhone) {
             setError("Todos los campos de facturación son obligatorios para clientes.");
             return;
         }
@@ -131,6 +132,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreate, de
         creationData.billingAddress = billingAddress;
         creationData.billingCommune = billingCommune;
         creationData.billingGiro = billingGiro;
+        creationData.billingPhone = billingPhone;
         creationData.pickupCost = Number(pickupCost) || 0;
         creationData.pricing = pricing;
     }
@@ -167,7 +169,12 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreate, de
 
         <form onSubmit={handleSubmit}>
           <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
-            {error && <p className="text-sm text-[var(--error-text)] bg-[var(--error-bg)] p-3 rounded-md">{error}</p>}
+            {error && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                    <strong className="font-bold">Error: </strong>
+                    <span className="block sm:inline">{error}</span>
+                </div>
+            )}
             <div>
               <label htmlFor="userName" className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Nombre Completo</label>
               <input type="text" id="userName" value={name} onChange={(e) => setName(e.target.value.toUpperCase())} required className={`${inputClasses} uppercase`} />
@@ -209,6 +216,9 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreate, de
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <input value={billingAddress} onChange={e => setBillingAddress(e.target.value)} placeholder="Dirección de Facturación" required className={inputClasses} />
                         <input value={billingCommune} onChange={e => setBillingCommune(e.target.value)} placeholder="Comuna" required className={inputClasses} />
+                    </div>
+                    <div>
+                        <input value={billingPhone} onChange={e => setBillingPhone(e.target.value)} placeholder="Teléfono de Contacto" required className={inputClasses} />
                     </div>
                 </div>
                 <div className="pt-4 mt-4 border-t border-[var(--border-primary)] space-y-4">

@@ -104,6 +104,7 @@ export interface UserCreationData extends RegisterData {
     billingAddress?: string;
     billingCommune?: string;
     billingGiro?: string;
+    billingPhone?: string;
     pickupCost?: number;
     pricing?: any;
     driverPermissions?: DriverPermissions;
