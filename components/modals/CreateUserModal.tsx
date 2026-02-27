@@ -82,31 +82,41 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreate, de
     e.preventDefault();
     setError('');
     
+    const missingFields: string[] = [];
+
     // Base validation
-    if (!name || !email || !password || !phone) {
-        setError("Nombre, correo, teléfono y contraseña son obligatorios.");
-        return;
-    }
+    if (!name) missingFields.push("Nombre Completo");
+    if (!email) missingFields.push("Correo Electrónico");
+    if (!password) missingFields.push("Contraseña");
+    if (!phone) missingFields.push("Teléfono");
 
     // Role-specific validation
     if (defaultRole === Role.Driver) {
-        if (!personalRut) {
-            setError("El RUT personal es obligatorio para los conductores.");
-            return;
-        }
-        if (personalRut && !validateRut(personalRut)) {
+        if (!personalRut) missingFields.push("RUT Personal");
+        else if (!validateRut(personalRut)) {
             setError("El RUT personal ingresado no es válido.");
             return;
         }
     } else if (defaultRole === Role.Client) {
-        if (!billingName || !billingRut || !billingAddress || !billingCommune || !billingGiro || !billingPhone) {
-            setError("Todos los campos de facturación son obligatorios para clientes.");
-            return;
-        }
+        if (!billingName) missingFields.push("Razón Social");
+        if (!billingRut) missingFields.push("RUT Empresa");
+        if (!billingAddress) missingFields.push("Dirección de Facturación");
+        if (!billingCommune) missingFields.push("Comuna");
+        if (!billingGiro) missingFields.push("Giro");
+        if (!billingPhone) missingFields.push("Teléfono de Contacto (Facturación)");
+
         if (billingRut && !validateRut(billingRut)) {
             setError("El RUT de facturación ingresado no es válido.");
             return;
         }
+    }
+
+    if (missingFields.length > 0) {
+        const msg = `Faltan los siguientes datos obligatorios: ${missingFields.join(', ')}.`;
+        setError(msg);
+        // Also alert for "popap" request
+        alert(msg);
+        return;
     }
 
     const creationData: UserCreationData = { 
@@ -141,7 +151,9 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreate, de
         await onCreate(creationData);
     } catch (err: any) {
         console.error("Error creating user:", err);
-        setError(err.message || "Error al crear el usuario. Inténtelo de nuevo.");
+        const msg = err.message || "Error al crear el usuario. Inténtelo de nuevo.";
+        setError(msg);
+        alert(msg); // Alert for server errors too (e.g. duplicate email)
     }
   };
 
