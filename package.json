@@ -1,7 +1,7 @@
 {
   "name": "full-envios-app",
-  "version": "1.9.0",
-  "versionComment": "Versión 1.9.0: Nueva versión mayor con mejoras de rendimiento y estabilidad.",
+  "version": "1.9.1",
+  "versionComment": "Versión 1.9.1: Correcciones y mejoras de estabilidad.",
   "private": true,
   "description": "Sistema de seguimiento de paquetes full-stack.",
   "scripts": {
