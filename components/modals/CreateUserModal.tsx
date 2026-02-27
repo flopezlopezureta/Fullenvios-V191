@@ -78,7 +78,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreate, de
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -137,7 +137,12 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose, onCreate, de
         creationData.pricing = pricing;
     }
 
-    onCreate(creationData);
+    try {
+        await onCreate(creationData);
+    } catch (err: any) {
+        console.error("Error creating user:", err);
+        setError(err.message || "Error al crear el usuario. Inténtelo de nuevo.");
+    }
   };
 
   const handlePhoneBlur = (e: React.FocusEvent<HTMLInputElement>) => {

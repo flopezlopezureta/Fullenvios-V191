@@ -92,6 +92,7 @@ async function initializeDatabase() {
                 "billingAddress" TEXT,
                 "billingCommune" TEXT,
                 "billingGiro" TEXT,
+                "billingPhone" TEXT,
                 invoices JSONB,
                 "personalRut" TEXT,
                 "hasCompany" BOOLEAN,
@@ -125,7 +126,8 @@ async function initializeDatabase() {
                 'billingRut TEXT',
                 'billingAddress TEXT',
                 'billingCommune TEXT',
-                'billingGiro TEXT'
+                'billingGiro TEXT',
+                'billingPhone TEXT'
             ];
             for (const spec of userCols) {
                 const col = spec.split(' ')[0];
