@@ -4,6 +4,10 @@
   "versionComment": "Versión 1.9.1: Correcciones y mejoras de estabilidad.",
   "private": true,
   "description": "Sistema de seguimiento de paquetes full-stack.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flopezlopezureta/Fullenvios-V191"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "vite",
