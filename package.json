@@ -1,7 +1,7 @@
 {
   "name": "full-envios-app",
-  "version": "1.9.1",
-  "versionComment": "Versión 1.9.1: Correcciones y mejoras de estabilidad.",
+  "version": "1.9.2",
+  "versionComment": "Versión 1.9.2: Verificación de cambio de repositorio.",
   "private": true,
   "description": "Sistema de seguimiento de paquetes full-stack.",
   "repository": {
